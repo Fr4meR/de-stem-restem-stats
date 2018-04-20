@@ -2,6 +2,7 @@ package de.framersoft.maven.destem.restemstats.core;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Date;
@@ -21,8 +22,12 @@ import eu.bittrade.libs.steemj.SteemJ;
 import eu.bittrade.libs.steemj.apis.database.models.state.Discussion;
 import eu.bittrade.libs.steemj.base.models.AccountName;
 import eu.bittrade.libs.steemj.base.models.AccountVote;
+import eu.bittrade.libs.steemj.base.models.ExtendedAccount;
 import eu.bittrade.libs.steemj.base.models.Permlink;
+import eu.bittrade.libs.steemj.base.models.Price;
+import eu.bittrade.libs.steemj.base.models.RewardFund;
 import eu.bittrade.libs.steemj.base.models.TimePointSec;
+import eu.bittrade.libs.steemj.enums.RewardFundType;
 import eu.bittrade.libs.steemj.exceptions.SteemCommunicationException;
 import eu.bittrade.libs.steemj.exceptions.SteemResponseException;
 /**
@@ -30,89 +35,114 @@ import eu.bittrade.libs.steemj.exceptions.SteemResponseException;
  * @author fr4mer
  * @since 18.04.2018
  */
-public class RestemStats {
+public class RestemStats extends Thread{
 
 	/**
 	 * api object to make calls to the Steem-API
 	 */
 	private SteemJ steem;
 	
+	private Date start;
+	private Date end;
+	
+	private List<RestemStatsEventListener> eventListeners = new ArrayList<RestemStatsEventListener>();
+	
 	/**
 	 * Constructor
 	 * @param steem
 	 * 		the object to make calls to the steem api with
 	 */
-	public RestemStats(SteemJ steem) {
+	public RestemStats(SteemJ steem, Date start, Date end) {
 		this.steem = steem;
+		this.start = start;
+		this.end = end;
 	}
+
+	@Override
+	public void run(){
+		try {
+			List<AccountVote> deStemVotes = getAccountVotesBetween(new AccountName("de-stem"), start, end);
+	        List<AccountVote> steemStemVotes = getAccountVotesBetween(new AccountName("steemstem"), start, end);
+	        
+	        for(RestemStatsEventListener listener : eventListeners) {
+	        	listener.onVotesLoaded(deStemVotes.size(), steemStemVotes.size());
+	        }
+	        
+	        //check if the votes from de-stem got voted AFTERWARDS by steemstem
+	        List<AccountVote> reSteemVotes = new ArrayList<AccountVote>();
+	        for(AccountVote deStemVote : deStemVotes) {
+	        	//get same post voted by steemstem
+	        	AccountVote steemStemVote = findAccountVoteByAuthorPerm(deStemVote.getAuthorperm(), steemStemVotes);
+	        	
+	        	//skip the vote if not voted by steemStem
+	        	if(steemStemVote == null) continue;
+	        	
+	        	//check if the steemStemVote was after the deStemVote
+	        	if(steemStemVote.getTime().getDateTimeAsTimestamp() > deStemVote.getTime().getDateTimeAsTimestamp()) {
+	        		reSteemVotes.add(steemStemVote);
+	        	}
+	        }
+	        
+	        for(RestemStatsEventListener listener : eventListeners) {
+	        	listener.onRestemVotesLoaded(reSteemVotes.size());
+	        }
+	        
+	        //now we have all votes from de-stem that were voted afterwards by steemstem
+	        //we need to determine if those votes were for posts with de-stem tag
+	        //and if they are actual blog posts and not comments..
+	        //.. so we load the "Discussions" for the votes
+	        List<Discussion> discussions = new ArrayList<Discussion>();
+	        for(AccountVote vote : reSteemVotes) {
+	        	AccountName author = getAccountNameFromAuthPerm(vote.getAuthorperm());
+	        	Permlink permLink = getPermLinkFromAuthPerm(vote.getAuthorperm());
+	        	
+	        	Discussion disc = steem.getContent(author, permLink);
+	        	
+	        	//blog posts are always on depth 0, so skip others
+	        	if(disc.getDepth() > 0) continue;
+	        	
+	        	//skip all posts that don't use the de-stem tag
+	        	if(!usesDeStemTag(disc)) continue;
+	        	
+	        	discussions.add(disc);
+	        }
+	        
+	        for(RestemStatsEventListener listener : eventListeners) {
+	        	listener.onDiscussionsLoaded(discussions.size());
+	        }
+	        
+	        //build list of unique accounts from the discussions
+	        List<String> uniqueAuthors = getUniqueAuthors(discussions);
+	        
+	        for(RestemStatsEventListener listener : eventListeners) {
+	        	listener.onUniqueAuthorsFound(uniqueAuthors.size());
+	        }
+	        
+	        //calculate the mean posts per day
+	        long diff = end.getTime() - start.getTime();
+	        long days = TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS);
+	        double meanPostsPerDay = discussions.size() / (double) days;
 	
-	/**
-	 * gets the restemstats from the start date to the end date
-	 * @param start
-	 * 		the start date (inclusive)
-	 * @param end
-	 * 		the end date (exclusive)
-	 * @return
-	 * 		result object containing the gathered data
-	 * @throws SteemCommunicationException
-	 * @throws SteemResponseException
-	 * @throws JsonParseException
-	 * @throws JsonMappingException
-	 * @throws IOException
-	 */
-	public RestemStatsResult requestRestemStats(Date start, Date end) throws SteemCommunicationException, SteemResponseException, JsonParseException, JsonMappingException, IOException {
-		List<AccountVote> deStemVotes = getAccountVotesBetween(new AccountName("de-stem"), start, end);
-        List<AccountVote> steemStemVotes = getAccountVotesBetween(new AccountName("steemstem"), start, end);
-        
-        //check if the votes from de-stem got voted AFTERWARDS by steemstem
-        List<AccountVote> reSteemVotes = new ArrayList<AccountVote>();
-        for(AccountVote deStemVote : deStemVotes) {
-        	//get same post voted by steemstem
-        	AccountVote steemStemVote = findAccountVoteByAuthorPerm(deStemVote.getAuthorperm(), steemStemVotes);
-        	
-        	//skip the vote if not voted by steemStem
-        	if(steemStemVote == null) continue;
-        	
-        	//check if the steemStemVote was after the deStemVote
-        	if(steemStemVote.getTime().getDateTimeAsTimestamp() > deStemVote.getTime().getDateTimeAsTimestamp()) {
-        		reSteemVotes.add(steemStemVote);
-        	}
-        }
-        
-        //now we have all votes from de-stem that were voted afterwards by steemstem
-        //we need to determine if those votes were for posts with de-stem tag
-        //and if they are actual blog posts and not comments..
-        //.. so we load the "Discussions" for the votes
-        List<Discussion> discussions = new ArrayList<Discussion>();
-        for(AccountVote vote : reSteemVotes) {
-        	AccountName author = getAccountNameFromAuthPerm(vote.getAuthorperm());
-        	Permlink permLink = getPermLinkFromAuthPerm(vote.getAuthorperm());
-        	
-        	Discussion disc = steem.getContent(author, permLink);
-        	
-        	//blog posts are always on depth 0, so skip others
-        	if(disc.getDepth() > 0) continue;
-        	
-        	//skip all posts that don't use the de-stem tag
-        	if(!usesDeStemTag(disc)) continue;
-        	
-        	discussions.add(disc);
-        }
-        
-        //build list of unique accounts from the discussions
-        List<String> uniqueAuthors = getUniqueAuthors(discussions);
-        
-        //calculate the mean posts per day
-        long diff = start.getTime() - end.getTime();
-        long days = TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS);
-        double meanPostsPerDay = discussions.size() / (double) days;
-        
-        //store all the gathered data in the result object and return it
-        RestemStatsResult result = new RestemStatsResult();
-        result.setDiscussions(discussions);
-        result.setUniqueAuthors(uniqueAuthors);
-        result.setMeanPostsPerDay(meanPostsPerDay);
-        return result;
+	        System.out.println(calculateVoteWorth(new AccountName("de-stem"), 1, 0.9));
+	        System.out.println(calculateVoteWorth(new AccountName("steemstem"), 1, 1));
+	        System.out.println(calculateVoteWorth(new AccountName("curie"), 1, 1));
+	        System.out.println(calculateVoteWorth(new AccountName("sco"), 1, 1));
+	        
+	        
+	        //store all the gathered data in the result object and publish it in the callbacks
+	        RestemStatsResult result = new RestemStatsResult();
+	        result.setDiscussions(discussions);
+	        result.setUniqueAuthors(uniqueAuthors);
+	        result.setMeanPostsPerDay(meanPostsPerDay);
+	        for(RestemStatsEventListener listener : eventListeners) {
+	        	listener.onResultReady(result);
+	        }
+		}
+		catch(Exception e) {
+			for(RestemStatsEventListener listener : eventListeners) {
+	        	listener.onError(e);
+	        }
+		}
 	}
 	
 	/**
@@ -264,5 +294,51 @@ public class RestemStats {
 		});
     	
     	return uniqueAuthors;
+    }
+    
+    public void addListener(RestemStatsEventListener listener) {
+    	eventListeners.add(listener);
+    }
+    
+    /**
+     * Calculates the worth (rounded to 2 decimal places) of a vote for an account.
+     * @param account
+     * 		the account
+     * @param votePower
+     * 		the voting power of the account
+     * @param voteWeight
+     * 		the weight of the vote
+     * @return
+     * 		the worth of the vote
+     * @throws SteemCommunicationException
+     * @throws SteemResponseException
+     * @see https://steemit.com/steem/@yabapmatt/how-to-calculate-the-value-of-a-vote
+     */
+    private double calculateVoteWorth(AccountName account, double votePower, double voteWeight) throws SteemCommunicationException, SteemResponseException {
+    	double voteWorth = 0.0;
+    	
+    	List<ExtendedAccount> accounts = steem.getAccounts(Arrays.asList(account));
+        RewardFund rewardFund = steem.getRewardFund(RewardFundType.POST);
+        Price price = steem.getCurrentMedianHistoryPrice();
+        if(accounts.size() == 1) {
+        	ExtendedAccount deStem = accounts.get(0);
+        	double vestingShares = deStem.getVestingShares().getAmount();
+        	double receivedShares = deStem.getReceivedVestingShares().getAmount();
+        	double delegatedShares = deStem.getDelegatedVestingShares().getAmount();
+        	
+        	double vestsTotal = vestingShares + receivedShares - delegatedShares;
+
+        	
+        	double recentClaims = rewardFund.getRecentClaims().doubleValue();
+        	double x1 = vestsTotal / recentClaims;
+        	double rewardPoolBalance = rewardFund.getRewardBalance().getAmount();
+        	double x2 = x1 * rewardPoolBalance / 1000;
+        	double sbdPerSteem = (double) price.getBase().getAmount() / (double) price.getQuote().getAmount();
+        	double x3 = x2 * sbdPerSteem;
+        	voteWorth = x3 * 2 / 100 * votePower * voteWeight;
+        	voteWorth = Math.round(voteWorth * 100.0) / 100.0; 
+        }
+        
+        return voteWorth;
     }
 }
