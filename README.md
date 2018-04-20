@@ -1,2 +1,2 @@
-# de-stem-restem-stats
-Calculation of ReStem Statistics for de-stem
+# Tool to calculate the ReStem-Statistics of the de-stem Account on Steemit
+
