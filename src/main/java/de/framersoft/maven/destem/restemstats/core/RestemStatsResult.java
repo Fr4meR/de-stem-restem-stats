@@ -24,10 +24,6 @@ public class RestemStatsResult {
 	 * mean posts per day
 	 */
 	private double meanPostsPerDay;
-
-	private double smallVoteWorth;
-	private double mediumVoteWorth;
-	private double bigVoteWorth;
 	
 	/**
 	 * @return the discussions
@@ -77,47 +73,5 @@ public class RestemStatsResult {
 	 */
 	public int getNumberOfPosts() {
 		return discussions.size();
-	}
-
-	/**
-	 * @return the smallVoteWorth
-	 */
-	public double getSmallVoteWorth() {
-		return smallVoteWorth;
-	}
-
-	/**
-	 * @param smallVoteWorth the smallVoteWorth to set
-	 */
-	public void setSmallVoteWorth(double smallVoteWorth) {
-		this.smallVoteWorth = smallVoteWorth;
-	}
-
-	/**
-	 * @return the mediumVoteWorth
-	 */
-	public double getMediumVoteWorth() {
-		return mediumVoteWorth;
-	}
-
-	/**
-	 * @param mediumVoteWorth the mediumVoteWorth to set
-	 */
-	public void setMediumVoteWorth(double mediumVoteWorth) {
-		this.mediumVoteWorth = mediumVoteWorth;
-	}
-
-	/**
-	 * @return the bigVoteWorth
-	 */
-	public double getBigVoteWorth() {
-		return bigVoteWorth;
-	}
-
-	/**
-	 * @param bigVoteWorth the bigVoteWorth to set
-	 */
-	public void setBigVoteWorth(double bigVoteWorth) {
-		this.bigVoteWorth = bigVoteWorth;
 	}
 }

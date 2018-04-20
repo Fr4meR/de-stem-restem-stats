@@ -2,7 +2,6 @@ package de.framersoft.maven.destem.restemstats.core;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Date;
@@ -22,12 +21,8 @@ import eu.bittrade.libs.steemj.SteemJ;
 import eu.bittrade.libs.steemj.apis.database.models.state.Discussion;
 import eu.bittrade.libs.steemj.base.models.AccountName;
 import eu.bittrade.libs.steemj.base.models.AccountVote;
-import eu.bittrade.libs.steemj.base.models.ExtendedAccount;
 import eu.bittrade.libs.steemj.base.models.Permlink;
-import eu.bittrade.libs.steemj.base.models.Price;
-import eu.bittrade.libs.steemj.base.models.RewardFund;
 import eu.bittrade.libs.steemj.base.models.TimePointSec;
-import eu.bittrade.libs.steemj.enums.RewardFundType;
 import eu.bittrade.libs.steemj.exceptions.SteemCommunicationException;
 import eu.bittrade.libs.steemj.exceptions.SteemResponseException;
 /**
@@ -122,12 +117,6 @@ public class RestemStats extends Thread{
 	        long diff = end.getTime() - start.getTime();
 	        long days = TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS);
 	        double meanPostsPerDay = discussions.size() / (double) days;
-	
-	        System.out.println(calculateVoteWorth(new AccountName("de-stem"), 1, 0.9));
-	        System.out.println(calculateVoteWorth(new AccountName("steemstem"), 1, 1));
-	        System.out.println(calculateVoteWorth(new AccountName("curie"), 1, 1));
-	        System.out.println(calculateVoteWorth(new AccountName("sco"), 1, 1));
-	        
 	        
 	        //store all the gathered data in the result object and publish it in the callbacks
 	        RestemStatsResult result = new RestemStatsResult();
@@ -272,7 +261,7 @@ public class RestemStats extends Thread{
     /**
      * Creates a list of unique users from a collection of discussions.
      * @param discussions
-     * 		the collection of discussions
+     * 	)	the collection of discussions
      * @return
      * 		A lexicographically sorted list of unique user names.
      */
@@ -298,47 +287,5 @@ public class RestemStats extends Thread{
     
     public void addListener(RestemStatsEventListener listener) {
     	eventListeners.add(listener);
-    }
-    
-    /**
-     * Calculates the worth (rounded to 2 decimal places) of a vote for an account.
-     * @param account
-     * 		the account
-     * @param votePower
-     * 		the voting power of the account
-     * @param voteWeight
-     * 		the weight of the vote
-     * @return
-     * 		the worth of the vote
-     * @throws SteemCommunicationException
-     * @throws SteemResponseException
-     * @see https://steemit.com/steem/@yabapmatt/how-to-calculate-the-value-of-a-vote
-     */
-    private double calculateVoteWorth(AccountName account, double votePower, double voteWeight) throws SteemCommunicationException, SteemResponseException {
-    	double voteWorth = 0.0;
-    	
-    	List<ExtendedAccount> accounts = steem.getAccounts(Arrays.asList(account));
-        RewardFund rewardFund = steem.getRewardFund(RewardFundType.POST);
-        Price price = steem.getCurrentMedianHistoryPrice();
-        if(accounts.size() == 1) {
-        	ExtendedAccount deStem = accounts.get(0);
-        	double vestingShares = deStem.getVestingShares().getAmount();
-        	double receivedShares = deStem.getReceivedVestingShares().getAmount();
-        	double delegatedShares = deStem.getDelegatedVestingShares().getAmount();
-        	
-        	double vestsTotal = vestingShares + receivedShares - delegatedShares;
-
-        	
-        	double recentClaims = rewardFund.getRecentClaims().doubleValue();
-        	double x1 = vestsTotal / recentClaims;
-        	double rewardPoolBalance = rewardFund.getRewardBalance().getAmount();
-        	double x2 = x1 * rewardPoolBalance / 1000;
-        	double sbdPerSteem = (double) price.getBase().getAmount() / (double) price.getQuote().getAmount();
-        	double x3 = x2 * sbdPerSteem;
-        	voteWorth = x3 * 2 / 100 * votePower * voteWeight;
-        	voteWorth = Math.round(voteWorth * 100.0) / 100.0; 
-        }
-        
-        return voteWorth;
     }
 }

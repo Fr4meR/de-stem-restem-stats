@@ -1,16 +1,22 @@
 package de.framersoft.maven.destem.restemstats.gui;
 
-import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Toolkit;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.Writer;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Properties;
@@ -19,10 +25,13 @@ import java.util.StringJoiner;
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.SwingConstants;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
@@ -36,12 +45,16 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import de.framersoft.maven.destem.restemstats.core.RestemStats;
 import de.framersoft.maven.destem.restemstats.core.RestemStatsEventListener;
 import de.framersoft.maven.destem.restemstats.core.RestemStatsResult;
+import de.framersoft.maven.destem.restemstats.core.RestemVoteValues;
+import de.framersoft.maven.destem.restemstats.core.RestemVoteValuesEventListener;
 import eu.bittrade.libs.steemj.SteemJ;
 import eu.bittrade.libs.steemj.exceptions.SteemCommunicationException;
 import eu.bittrade.libs.steemj.exceptions.SteemResponseException;
 
 public class RestemGUI extends JFrame{
 	private static final long serialVersionUID = -7266748948961079730L;
+	
+	private Properties voteValues = new Properties();
 	
 	private JDatePickerImpl dpStartDate;
 	private JDatePickerImpl dpEndDate;
@@ -50,14 +63,23 @@ public class RestemGUI extends JFrame{
 	
 	private JButton btnGenerate;
 	private JButton btnCopySteemFormat;
+	private JButton btnRefreshVoteValues;
 	
 	private JProgressBar progress;
 	
-	private String restemStatsSteemitFormat;
-	 
+	JTextField txtVoteSmall;
+	JTextField txtVoteMedium;
+	JTextField txtVoteBig;
 	
 	public RestemGUI() {
+		try(InputStream is = new FileInputStream("data/voting-values.prop")){
+			voteValues.load(is);
+		} catch (IOException e1) {
+			//do nothing here is expected at first start / deleted properties file
+		}
+		
 		setTitle("ReStem Statistiken");
+		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		
 		JPanel pane = new JPanel();
 		pane.setLayout(new GridBagLayout());
@@ -67,13 +89,15 @@ public class RestemGUI extends JFrame{
 		c.insets = new Insets(5, 5, 5, 5);
 		
 		//start date
-		JLabel lblStartDate = new JLabel("Start (inklusive)");
+		JLabel lblStartDate = new JLabel("Start");
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.gridx = 0;
 		c.gridy = 0;
+		c.gridwidth = 1;
+		c.weightx = 0.16;
 		pane.add(lblStartDate, c);
 		
-		UtilDateModel modelStart = new UtilDateModel();
+		UtilDateModel modelStart = new UtilDateModel(getLastSaturday());
 		Properties propStart = new Properties();
 		propStart.put("text.today", "Heute");
 		propStart.put("text.month", "Monat");
@@ -81,8 +105,6 @@ public class RestemGUI extends JFrame{
 		
 		JDatePanelImpl datePanelStart = new JDatePanelImpl(modelStart, propStart);
 		dpStartDate = new JDatePickerImpl(datePanelStart, new RestemDatePickerFormatter());
-		dpStartDate.setPreferredSize(new Dimension(200, 25));
-		dpStartDate.setMinimumSize(new Dimension(200, 25));
 		dpStartDate.getModel().addChangeListener(new ChangeListener() {
 			@Override
 			public void stateChanged(ChangeEvent e) {
@@ -92,16 +114,20 @@ public class RestemGUI extends JFrame{
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.gridx = 1;
 		c.gridy = 0;
+		c.gridwidth = 3;
+		c.weightx = 0.34;
 		pane.add(dpStartDate, c);
 		
 		//end date
-		JLabel lblEndDate = new JLabel("Ende (exklusive)");
+		JLabel lblEndDate = new JLabel("Ende");
 		c.fill = GridBagConstraints.HORIZONTAL;
-		c.gridx = 0;
-		c.gridy = 1;
+		c.gridx = 4;
+		c.gridy = 0;
+		c.gridwidth = 1;
+		c.weightx = 0.16;
 		pane.add(lblEndDate, c);
 		
-		UtilDateModel modelEnd = new UtilDateModel();
+		UtilDateModel modelEnd = new UtilDateModel(getNextFriday());
 		Properties propEnd = new Properties();
 		propEnd.put("text.today", "Heute");
 		propEnd.put("text.month", "Monat");
@@ -109,9 +135,6 @@ public class RestemGUI extends JFrame{
 		
 		JDatePanelImpl datePanelEnd = new JDatePanelImpl(modelEnd, propEnd);
 		dpEndDate = new JDatePickerImpl(datePanelEnd, new RestemDatePickerFormatter());
-		
-		dpEndDate.setPreferredSize(new Dimension(200, 25));
-		dpEndDate.setMinimumSize(new Dimension(200, 25));
 		dpEndDate.getModel().addChangeListener(new ChangeListener() {
 			@Override
 			public void stateChanged(ChangeEvent e) {
@@ -119,12 +142,69 @@ public class RestemGUI extends JFrame{
 			}
 		});
 		c.fill = GridBagConstraints.HORIZONTAL;
-		c.gridx = 1;
-		c.gridy = 1;
+		c.gridx = 5;
+		c.gridy = 0;
+		c.gridwidth = 2;
+		c.weightx = 0.34;
 		pane.add(dpEndDate, c);
 		
+		//vote small
+		JLabel lblVoteSmall = new JLabel("Vote-Werte");
+		c.fill = GridBagConstraints.HORIZONTAL;
+		c.gridx = 0;
+		c.gridy = 1;
+		c.gridwidth = 1;
+		pane.add(lblVoteSmall, c);
+		
+		txtVoteSmall = new JTextField();
+		txtVoteSmall.setText(voteValues.getProperty("vote_small", "0"));
+		txtVoteSmall.setHorizontalAlignment(SwingConstants.RIGHT);
+		c.fill = GridBagConstraints.HORIZONTAL;
+		c.gridx = 1;
+		c.gridy = 1;
+		c.gridwidth = 1;
+		pane.add(txtVoteSmall, c);
+		
+		//vote medium		
+		txtVoteMedium = new JTextField();
+		txtVoteMedium.setText(voteValues.getProperty("vote_medium", "0"));
+		txtVoteMedium.setHorizontalAlignment(SwingConstants.RIGHT);
+		c.fill = GridBagConstraints.HORIZONTAL;
+		c.gridx = 2;
+		c.gridy = 1;
+		c.gridwidth = 1;
+		pane.add(txtVoteMedium, c);
+		
+		//vote big
+		txtVoteBig = new JTextField();
+		txtVoteBig.setText(voteValues.getProperty("vote_big", "0"));
+		txtVoteBig.setHorizontalAlignment(SwingConstants.RIGHT);
+		c.fill = GridBagConstraints.HORIZONTAL;
+		c.gridx = 3;
+		c.gridy = 1;
+		c.gridwidth = 1;
+		pane.add(txtVoteBig, c);
+		
+		//button to refresh vote values
+		btnRefreshVoteValues = new JButton("Werte erneuern...");
+		btnRefreshVoteValues.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				try {
+					reloadVoteValues();
+				} catch (SteemCommunicationException | SteemResponseException e1) {
+					e1.printStackTrace();
+				}
+			}
+		});
+		c.fill = GridBagConstraints.HORIZONTAL;
+		c.gridx = 4;
+		c.gridy = 1;
+		c.gridwidth = 3;
+		pane.add(btnRefreshVoteValues, c);
+		
 		//generate button
-		btnGenerate = new JButton("Laden...");
+		btnGenerate = new JButton("Statistiken erzeugen...");
 		btnGenerate.setEnabled(false);
 		btnGenerate.addActionListener(new ActionListener() {
 			@Override
@@ -137,9 +217,9 @@ public class RestemGUI extends JFrame{
 			}
 		});
 		c.fill = GridBagConstraints.BOTH;
-		c.gridx = 2;
-		c.gridy = 0;
-		c.gridwidth = 1;
+		c.gridx = 0;
+		c.gridy = 2;
+		c.gridwidth = 7;
 		c.gridheight = 2;
 		c.weightx = 1.0;
 		pane.add(btnGenerate, c);
@@ -150,8 +230,8 @@ public class RestemGUI extends JFrame{
 		progress.setString("");
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.gridx = 0;
-		c.gridy = 2;
-		c.gridwidth = 3;
+		c.gridy = 4;
+		c.gridwidth = 7;
 		c.gridheight = 1;
 		pane.add(progress, c);
 		
@@ -161,24 +241,36 @@ public class RestemGUI extends JFrame{
 		JScrollPane scrollTextArea = new JScrollPane(txtOutput);
 		c.fill = GridBagConstraints.BOTH;
 		c.gridx = 0;
-		c.gridy = 3;
-		c.gridwidth = 3;
+		c.gridy = 5;
+		c.gridwidth = 7;
 		c.gridheight = 1;
 		c.weighty = 1.0;
 		pane.add(scrollTextArea, c);
 		
 		//copy in steemit format
-		btnCopySteemFormat = new JButton("Im Steemit-Format kopieren");
+		btnCopySteemFormat = new JButton("In Zwischenablage kopieren");
 		btnCopySteemFormat.setEnabled(false);
+		btnCopySteemFormat.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				StringSelection selection = new StringSelection(txtOutput.getText());
+				Clipboard clip = Toolkit.getDefaultToolkit().getSystemClipboard();
+				clip.setContents(selection, selection);
+				
+				JOptionPane.showMessageDialog(null, "In Zwischenablage kopiert.");
+			}
+		});
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.gridx = 0;
-		c.gridy = 4;
-		c.gridwidth = 3;
+		c.gridy = 6;
+		c.gridwidth = 7;
 		c.gridheight = 1;
 		c.weighty = 0;
 		pane.add(btnCopySteemFormat, c);
 		
 		add(pane);
+		
+		datesChanged();
 	}
 	
 	private void datesChanged() {
@@ -197,21 +289,34 @@ public class RestemGUI extends JFrame{
 		return startDate;
 	}
 	
-	private Date getEndDate() {
+	private Date getEndDateDisplay() {
 		Date endDate = (Date) dpEndDate.getModel().getValue();
 		return endDate;
 	}
 	
-	private void setLoadingStats(boolean loading) {
+	private Date getEndDate() {
+		Date endDate = (Date) dpEndDate.getModel().getValue();
+		if(endDate == null) return null;
+		
+		Calendar cal = Calendar.getInstance();
+		cal.setTime(endDate);
+		cal.add(Calendar.DATE, 1);
+		
+		return cal.getTime();
+	}
+	
+	private void setLoading(boolean loading) {
 		if(loading) {
 			btnGenerate.setEnabled(false);
+			btnRefreshVoteValues.setEnabled(false);
 			dpStartDate.setEnabled(false);
 			dpStartDate.getComponent(1).setEnabled(false);
 			dpEndDate.setEnabled(false);
 			dpEndDate.getComponent(1).setEnabled(false);
 		}
 		else {
-			btnGenerate.setEnabled(true);
+			datesChanged();
+			btnRefreshVoteValues.setEnabled(true);
 			dpStartDate.getComponent(1).setEnabled(true);
 			dpStartDate.setEnabled(true);
 			dpEndDate.getComponent(1).setEnabled(true);
@@ -221,6 +326,8 @@ public class RestemGUI extends JFrame{
 	
 	private void loadRestemStats() throws JsonParseException, JsonMappingException, SteemCommunicationException, SteemResponseException, IOException {
 		clearStats();
+		
+		saveVoteValues();
 		
 		Date dateStart = getStartDate();
 		Date dateEnd = getEndDate();
@@ -239,22 +346,22 @@ public class RestemGUI extends JFrame{
 			@Override
 			public void onUniqueAuthorsFound(int uniqueAuthors) {
 				progress.setValue(4);
+				progress.setString("Ermittle Vote-Werte...");
 			}
 			
 			@Override
 			public void onResultReady(RestemStatsResult result) {
 				progress.setValue(5);
 				progress.setString("Fertig");
-				displayRestemStats(result);
-				setSteemitFormattingText(result, dateStart, dateEnd);
-				setLoadingStats(false);
+				setSteemitFormattingText(result, dateStart, getEndDateDisplay());
+				setLoading(false);
 			}
 			
 			@Override
 			public void onError(Exception e) {
-				progress.setValue(5);
+				progress.setValue(progress.getMaximum());
 				progress.setString("Fehler");
-				setLoadingStats(false);
+				setLoading(false);
 				e.printStackTrace();
 			}
 			
@@ -270,27 +377,15 @@ public class RestemGUI extends JFrame{
 				progress.setString("Lade Posts...");
 			}
 		});
-		setLoadingStats(true);
+		setLoading(true);
+		progress.setMinimum(0);
+		progress.setMaximum(5);
 		progress.setValue(0);
 		progress.setString("Lade Votes...");
 		stats.start();
 		
 		//handle gui elements
 		btnGenerate.setEnabled(false);
-	}
-	
-	private void displayRestemStats(RestemStatsResult result) {
-		StringJoiner sj = new StringJoiner(System.lineSeparator());
-		sj.add("# Posts: " + result.getDiscussions().size());
-		sj.add("Ø Posts / Tag: " + Math.round(result.getMeanPostsPerDay() * 10.0) / 10.0);
-		sj.add("# Autoren: " + result.getUniqueAuthors().size());
-		sj.add("");
-		sj.add("Liste der Autoren: ");
-		List<String> authors = result.getUniqueAuthors();
-		for(String author : authors) {
-			sj.add("@" + author);
-		}
-		txtOutput.setText(sj.toString());
 	}
 	
 	private void setSteemitFormattingText(RestemStatsResult result, Date start, Date end) {		
@@ -300,7 +395,7 @@ public class RestemGUI extends JFrame{
 			byte[] data = new byte[(int) file.length()];
 			fis.read(data);
 			
-			restemStatsSteemitFormat = new String(data, "UTF-8");
+			String restemStatsSteemitFormat = new String(data, "UTF-8");
 			
 			//replace placeholders
 			DateFormat formatter = new SimpleDateFormat("dd.MM.yyyy");
@@ -313,13 +408,18 @@ public class RestemGUI extends JFrame{
 			restemStatsSteemitFormat = restemStatsSteemitFormat.replaceAll("#MeanPostsPerDay#", Double.toString(meanPostsPerDay));
 			restemStatsSteemitFormat = restemStatsSteemitFormat.replaceAll("#NumberOfAuthors#", Integer.toString(result.getUniqueAuthors().size()));
 			
+			restemStatsSteemitFormat = restemStatsSteemitFormat.replaceAll("#VoteSmall#", txtVoteSmall.getText());
+			restemStatsSteemitFormat = restemStatsSteemitFormat.replaceAll("#VoteMedium#", txtVoteMedium.getText());
+			restemStatsSteemitFormat = restemStatsSteemitFormat.replaceAll("#VoteBig#", txtVoteBig.getText());
+			
 			StringJoiner sj = new StringJoiner(System.lineSeparator());
 			List<String> authors = result.getUniqueAuthors();
 			for(String author : authors) {
 				sj.add("@" + author);
 			}
 			restemStatsSteemitFormat = restemStatsSteemitFormat.replaceAll("#ListOfAuthors#", sj.toString());
-			System.out.println(restemStatsSteemitFormat);
+
+			txtOutput.setText(restemStatsSteemitFormat);
 			btnCopySteemFormat.setEnabled(true);
 		} catch (Exception e) {
 			//ignore
@@ -328,7 +428,84 @@ public class RestemGUI extends JFrame{
 	
 	private void clearStats() {
 		txtOutput.setText("");
-		restemStatsSteemitFormat = null;
 		btnCopySteemFormat.setEnabled(false);
+	}
+	
+	private void reloadVoteValues() throws SteemCommunicationException, SteemResponseException {
+		RestemVoteValues values = new RestemVoteValues(new SteemJ());
+		values.addEventListener(new RestemVoteValuesEventListener() {
+			
+			@Override
+			public void onTotalStepsCalculated(int totalSteps) {
+				progress.setMinimum(0);
+				progress.setMaximum(totalSteps);
+			}
+			
+			@Override
+			public void onStep() {
+				int currentValue = progress.getValue() + 1;
+				progress.setValue(currentValue);
+				progress.setString("Lade Vote-Werte..." + currentValue + " / " + (progress.getMaximum()));
+			}
+			
+			@Override
+			public void onFinished(double voteSmall, double voteMedium, double voteBig) {								
+				//round and convert to strings
+				String small = Integer.toString((int)Math.round(voteSmall));
+				String medium = Integer.toString((int)Math.round(voteMedium));
+				String big = Integer.toString((int)Math.round(voteBig));
+				
+				txtVoteSmall.setText(small);
+				txtVoteMedium.setText(medium);
+				txtVoteBig.setText(big);
+				progress.setString("Fertig");
+				
+				try {
+					saveVoteValues();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				
+				setLoading(false);
+			}
+			
+			@Override
+			public void onError(Exception e) {
+				setLoading(false);
+				progress.setString("Fehler");
+				progress.setValue(progress.getMaximum());
+				e.printStackTrace();
+			}
+		});
+		
+		progress.setString("Lade Vote-Werte...");
+		progress.setValue(0);
+		setLoading(true);
+		values.start();
+	}
+	
+	private void saveVoteValues() throws IOException {
+		voteValues.setProperty("vote_small", txtVoteSmall.getText());
+		voteValues.setProperty("vote_medium", txtVoteMedium.getText());
+		voteValues.setProperty("vote_big", txtVoteBig.getText());
+		
+		try(Writer writer = new FileWriter("data/voting-values.prop")){
+			voteValues.store(writer, "voting values");
+		}
+	}
+	
+	private Date getLastSaturday() {
+		Calendar cal = Calendar.getInstance();
+		int daysBack = cal.get(Calendar.DAY_OF_WEEK) * -1;
+		cal.add(Calendar.DATE, daysBack);
+		return cal.getTime();
+	}
+	
+	private Date getNextFriday() {
+		Calendar cal = Calendar.getInstance();
+		cal.setTime(getLastSaturday());
+		cal.add(Calendar.DATE, 6);
+		return cal.getTime();
 	}
 }
