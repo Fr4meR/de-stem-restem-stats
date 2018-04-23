@@ -5,7 +5,10 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 
 import javax.swing.JFormattedTextField.AbstractFormatter;
-
+/**
+ * date picker implementation used by the datepickers in the gui
+ * @author fr4mer
+ */
 public class RestemDatePickerFormatter extends AbstractFormatter {
 
 	private static final long serialVersionUID = -9184079794314043642L;

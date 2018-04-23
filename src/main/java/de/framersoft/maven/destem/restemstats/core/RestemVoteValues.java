@@ -20,7 +20,12 @@ import eu.bittrade.libs.steemj.base.models.RewardFund;
 import eu.bittrade.libs.steemj.enums.RewardFundType;
 import eu.bittrade.libs.steemj.exceptions.SteemCommunicationException;
 import eu.bittrade.libs.steemj.exceptions.SteemResponseException;
-
+/**
+ * class used to get the voting values for restems.
+ * the value is calculated by the votes of de-stem, steemstem and curie and their
+ * curation trails
+ * @author fr4mer
+ */
 public class RestemVoteValues extends Thread {
 	/**
 	 * api object to make calls to the Steem-API
@@ -104,7 +109,20 @@ public class RestemVoteValues extends Thread {
         return voteWorth;
     }
     
-    
+    /**
+     * calculates the total voting value for the accounts de-stem, steemstem and curie and their 
+     * curation trails
+     * @param mainAccountVotingDataFile
+     * 		the path to the file for the main voting account's configuration
+     * @param curationTrailDataFile
+     * 		the path to the fail containing the curation trail configuration
+     * @param votingValues
+     * 		a map containing the 100% voting values for all the accounts
+     * @return
+     * 		the total voting value
+     * @throws FileNotFoundException
+     * @throws IOException
+     */
     private double calculateTotalVoteValue(String mainAccountVotingDataFile, String curationTrailDataFile, Map<String, Double> votingValues) throws FileNotFoundException, IOException {
         Map<String, Double> votingAccounts = new HashMap<String, Double>();
         
@@ -153,10 +171,21 @@ public class RestemVoteValues extends Thread {
         return sum;
     }
     
+    /**
+     * adds an event listener
+     * @param listener
+     * 		the event listener to add
+     */
     public void addEventListener(RestemVoteValuesEventListener listener) {
     	eventListeners.add(listener);
     }
     
+    /**
+     * @return
+     * 		the current steem reward fund
+     * @throws SteemCommunicationException
+     * @throws SteemResponseException
+     */
     private RewardFund getRewardFund() throws SteemCommunicationException, SteemResponseException {
     	if(rewardFund == null) {
     		rewardFund = steem.getRewardFund(RewardFundType.POST);
@@ -165,6 +194,12 @@ public class RestemVoteValues extends Thread {
     	return rewardFund;
     }
     
+    /**
+     * @return
+     * 		the current median history price
+     * @throws SteemCommunicationException
+     * @throws SteemResponseException
+     */
     private Price getCurrentMedianHistoryPrice() throws SteemCommunicationException, SteemResponseException {
     	if(currentMedianHistoryPrice == null) {
     		currentMedianHistoryPrice = steem.getCurrentMedianHistoryPrice();
@@ -173,6 +208,15 @@ public class RestemVoteValues extends Thread {
     	return currentMedianHistoryPrice;
     }
     
+    /**
+     * calculates a map containing the 100% voting values for all the accounts
+     * @return
+     * 		the map containing the 100% voting values for the accounts
+     * @throws FileNotFoundException
+     * @throws IOException
+     * @throws SteemCommunicationException
+     * @throws SteemResponseException
+     */
     private Map<String, Double> getVotingValues() throws FileNotFoundException, IOException, SteemCommunicationException, SteemResponseException {
     	Set<String> accountNames = getAllAccountNamesFromFiles();
     	
@@ -194,6 +238,12 @@ public class RestemVoteValues extends Thread {
     	return votingWorths;
     }
     
+    /**
+     * @return
+     * 		a set of all the account names from the voting value configuration files
+     * @throws FileNotFoundException
+     * @throws IOException
+     */
     private Set<String> getAllAccountNamesFromFiles() throws FileNotFoundException, IOException{
     	Set<String> accountNames = new HashSet<String>();
     	

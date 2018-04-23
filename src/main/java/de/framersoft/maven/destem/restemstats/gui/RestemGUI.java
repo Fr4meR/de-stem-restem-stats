@@ -50,7 +50,10 @@ import de.framersoft.maven.destem.restemstats.core.RestemVoteValuesEventListener
 import eu.bittrade.libs.steemj.SteemJ;
 import eu.bittrade.libs.steemj.exceptions.SteemCommunicationException;
 import eu.bittrade.libs.steemj.exceptions.SteemResponseException;
-
+/**
+ * the main gui window
+ * @author fr4mer
+ */
 public class RestemGUI extends JFrame{
 	private static final long serialVersionUID = -7266748948961079730L;
 	
@@ -71,11 +74,15 @@ public class RestemGUI extends JFrame{
 	JTextField txtVoteMedium;
 	JTextField txtVoteBig;
 	
+	/**
+	 * constructor
+	 * @author fr4mer
+	 */
 	public RestemGUI() {
 		try(InputStream is = new FileInputStream("data/voting-values.prop")){
 			voteValues.load(is);
 		} catch (IOException e1) {
-			//do nothing here is expected at first start / deleted properties file
+			//do nothing here: is expected at first start / deleted properties file
 		}
 		
 		setTitle("ReStem Statistiken");
@@ -88,7 +95,7 @@ public class RestemGUI extends JFrame{
 		
 		c.insets = new Insets(5, 5, 5, 5);
 		
-		//start date
+		//start date label
 		JLabel lblStartDate = new JLabel("Start");
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.gridx = 0;
@@ -97,6 +104,7 @@ public class RestemGUI extends JFrame{
 		c.weightx = 0.16;
 		pane.add(lblStartDate, c);
 		
+		//start date date picker
 		UtilDateModel modelStart = new UtilDateModel(getLastSaturday());
 		Properties propStart = new Properties();
 		propStart.put("text.today", "Heute");
@@ -108,7 +116,7 @@ public class RestemGUI extends JFrame{
 		dpStartDate.getModel().addChangeListener(new ChangeListener() {
 			@Override
 			public void stateChanged(ChangeEvent e) {
-				datesChanged();
+				onDatesChanged();
 			}
 		});
 		c.fill = GridBagConstraints.HORIZONTAL;
@@ -118,7 +126,7 @@ public class RestemGUI extends JFrame{
 		c.weightx = 0.34;
 		pane.add(dpStartDate, c);
 		
-		//end date
+		//end date label
 		JLabel lblEndDate = new JLabel("Ende");
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.gridx = 4;
@@ -127,6 +135,7 @@ public class RestemGUI extends JFrame{
 		c.weightx = 0.16;
 		pane.add(lblEndDate, c);
 		
+		//start date date picker
 		UtilDateModel modelEnd = new UtilDateModel(getNextFriday());
 		Properties propEnd = new Properties();
 		propEnd.put("text.today", "Heute");
@@ -138,7 +147,7 @@ public class RestemGUI extends JFrame{
 		dpEndDate.getModel().addChangeListener(new ChangeListener() {
 			@Override
 			public void stateChanged(ChangeEvent e) {
-				datesChanged();
+				onDatesChanged();
 			}
 		});
 		c.fill = GridBagConstraints.HORIZONTAL;
@@ -148,7 +157,7 @@ public class RestemGUI extends JFrame{
 		c.weightx = 0.34;
 		pane.add(dpEndDate, c);
 		
-		//vote small
+		//vote values label
 		JLabel lblVoteSmall = new JLabel("Vote-Werte");
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.gridx = 0;
@@ -156,6 +165,7 @@ public class RestemGUI extends JFrame{
 		c.gridwidth = 1;
 		pane.add(lblVoteSmall, c);
 		
+		//vate value small
 		txtVoteSmall = new JTextField();
 		txtVoteSmall.setText(voteValues.getProperty("vote_small", "0"));
 		txtVoteSmall.setHorizontalAlignment(SwingConstants.RIGHT);
@@ -165,7 +175,7 @@ public class RestemGUI extends JFrame{
 		c.gridwidth = 1;
 		pane.add(txtVoteSmall, c);
 		
-		//vote medium		
+		//vote value medium		
 		txtVoteMedium = new JTextField();
 		txtVoteMedium.setText(voteValues.getProperty("vote_medium", "0"));
 		txtVoteMedium.setHorizontalAlignment(SwingConstants.RIGHT);
@@ -175,7 +185,7 @@ public class RestemGUI extends JFrame{
 		c.gridwidth = 1;
 		pane.add(txtVoteMedium, c);
 		
-		//vote big
+		//vote value big
 		txtVoteBig = new JTextField();
 		txtVoteBig.setText(voteValues.getProperty("vote_big", "0"));
 		txtVoteBig.setHorizontalAlignment(SwingConstants.RIGHT);
@@ -186,7 +196,7 @@ public class RestemGUI extends JFrame{
 		pane.add(txtVoteBig, c);
 		
 		//button to refresh vote values
-		btnRefreshVoteValues = new JButton("Werte erneuern...");
+		btnRefreshVoteValues = new JButton("Werte erneuern");
 		btnRefreshVoteValues.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -204,7 +214,7 @@ public class RestemGUI extends JFrame{
 		pane.add(btnRefreshVoteValues, c);
 		
 		//generate button
-		btnGenerate = new JButton("Statistiken erzeugen...");
+		btnGenerate = new JButton("ReStem Statistiken erzeugen");
 		btnGenerate.setEnabled(false);
 		btnGenerate.addActionListener(new ActionListener() {
 			@Override
@@ -237,7 +247,6 @@ public class RestemGUI extends JFrame{
 		
 		//output field
 		txtOutput = new JTextArea();
-		
 		JScrollPane scrollTextArea = new JScrollPane(txtOutput);
 		c.fill = GridBagConstraints.BOTH;
 		c.gridx = 0;
@@ -270,10 +279,16 @@ public class RestemGUI extends JFrame{
 		
 		add(pane);
 		
-		datesChanged();
+		//call this here to ensure all enabled/disabled states are set correctly
+		onDatesChanged();
 	}
 	
-	private void datesChanged() {
+	/**
+	 * method that is called whenever a date changed.
+	 * this is used to set the state of the generate button, so it is only
+	 * active if we have valid dates.
+	 */
+	private void onDatesChanged() {
 		//check if both dates are set and the end date is after the start date
 		Date dateStart = getStartDate();
 		Date dateEnd = getEndDate(); 
@@ -284,16 +299,28 @@ public class RestemGUI extends JFrame{
 		btnGenerate.setEnabled(enableButton);
 	}
 	
+	/**
+	 * @return
+	 * 		the start date
+	 */
 	private Date getStartDate() {
 		Date startDate = (Date) dpStartDate.getModel().getValue();
 		return startDate;
 	}
 	
+	/**
+	 * @return
+	 * 		the end date that is used for displaying purposes.
+	 */
 	private Date getEndDateDisplay() {
 		Date endDate = (Date) dpEndDate.getModel().getValue();
 		return endDate;
 	}
 	
+	/**
+	 * @return
+	 * 		the end date that is used for internal computing.
+	 */
 	private Date getEndDate() {
 		Date endDate = (Date) dpEndDate.getModel().getValue();
 		if(endDate == null) return null;
@@ -305,6 +332,12 @@ public class RestemGUI extends JFrame{
 		return cal.getTime();
 	}
 	
+	/**
+	 * sets if there is currently come loading process going.
+	 * disabled button / textfields accordingly.
+	 * @param loading
+	 * 		is there some loading process?
+	 */
 	private void setLoading(boolean loading) {
 		if(loading) {
 			btnGenerate.setEnabled(false);
@@ -315,7 +348,7 @@ public class RestemGUI extends JFrame{
 			dpEndDate.getComponent(1).setEnabled(false);
 		}
 		else {
-			datesChanged();
+			onDatesChanged();
 			btnRefreshVoteValues.setEnabled(true);
 			dpStartDate.getComponent(1).setEnabled(true);
 			dpStartDate.setEnabled(true);
@@ -324,6 +357,14 @@ public class RestemGUI extends JFrame{
 		}
 	}
 	
+	/**
+	 * loads the restem stats and displays them as finished.
+	 * @throws JsonParseException
+	 * @throws JsonMappingException
+	 * @throws SteemCommunicationException
+	 * @throws SteemResponseException
+	 * @throws IOException
+	 */
 	private void loadRestemStats() throws JsonParseException, JsonMappingException, SteemCommunicationException, SteemResponseException, IOException {
 		clearStats();
 		
@@ -358,7 +399,7 @@ public class RestemGUI extends JFrame{
 			}
 			
 			@Override
-			public void onError(Exception e) {
+			public void onException(Exception e) {
 				progress.setValue(progress.getMaximum());
 				progress.setString("Fehler");
 				setLoading(false);
@@ -388,6 +429,15 @@ public class RestemGUI extends JFrame{
 		btnGenerate.setEnabled(false);
 	}
 	
+	/**
+	 * sets the restem text
+	 * @param result
+	 * 		the result of the restemstats calculation
+	 * @param start
+	 * 		the start date
+	 * @param end
+	 * 		the end date
+	 */
 	private void setSteemitFormattingText(RestemStatsResult result, Date start, Date end) {		
 		//open template file
 		File file = new File("data/restemStats.tmpl");
@@ -426,11 +476,17 @@ public class RestemGUI extends JFrame{
 		}
 	}
 	
+	/**
+	 * restets displayed restem stats
+	 */
 	private void clearStats() {
 		txtOutput.setText("");
 		btnCopySteemFormat.setEnabled(false);
 	}
 	
+	/**
+	 * reloads the vote values and displays them as finished.
+	 */
 	private void reloadVoteValues() throws SteemCommunicationException, SteemResponseException {
 		RestemVoteValues values = new RestemVoteValues(new SteemJ());
 		values.addEventListener(new RestemVoteValuesEventListener() {
@@ -471,7 +527,7 @@ public class RestemGUI extends JFrame{
 			}
 			
 			@Override
-			public void onError(Exception e) {
+			public void onException(Exception e) {
 				setLoading(false);
 				progress.setString("Fehler");
 				progress.setValue(progress.getMaximum());
@@ -485,6 +541,10 @@ public class RestemGUI extends JFrame{
 		values.start();
 	}
 	
+	/**
+	 * persists the vote values, so they can be reused
+	 * @throws IOException
+	 */
 	private void saveVoteValues() throws IOException {
 		voteValues.setProperty("vote_small", txtVoteSmall.getText());
 		voteValues.setProperty("vote_medium", txtVoteMedium.getText());
@@ -495,6 +555,10 @@ public class RestemGUI extends JFrame{
 		}
 	}
 	
+	/**
+	 * @return
+	 * 		the last saturday
+	 */
 	private Date getLastSaturday() {
 		Calendar cal = Calendar.getInstance();
 		int daysBack = cal.get(Calendar.DAY_OF_WEEK) * -1;
@@ -502,6 +566,10 @@ public class RestemGUI extends JFrame{
 		return cal.getTime();
 	}
 	
+	/**
+	 * @return
+	 * 		the next friday
+	 */
 	private Date getNextFriday() {
 		Calendar cal = Calendar.getInstance();
 		cal.setTime(getLastSaturday());

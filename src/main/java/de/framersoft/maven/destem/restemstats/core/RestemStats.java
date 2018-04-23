@@ -129,7 +129,7 @@ public class RestemStats extends Thread{
 		}
 		catch(Exception e) {
 			for(RestemStatsEventListener listener : eventListeners) {
-	        	listener.onError(e);
+	        	listener.onException(e);
 	        }
 		}
 	}
