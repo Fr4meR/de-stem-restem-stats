@@ -43,9 +43,9 @@ public interface RestemStatsEventListener {
 	public void onResultReady(RestemStatsResult result);
 	
 	/**
-	 * gets calles when an error occurs
+	 * gets called when an error occurs
 	 * @param e
-	 * 		the exception that occured
+	 * 		the error that occured
 	 */
-	public void onException(Exception e);
+	public void onError(Throwable e);
 }

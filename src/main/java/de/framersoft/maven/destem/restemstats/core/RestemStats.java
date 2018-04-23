@@ -127,9 +127,9 @@ public class RestemStats extends Thread{
 	        	listener.onResultReady(result);
 	        }
 		}
-		catch(Exception e) {
+		catch(Throwable e) {
 			for(RestemStatsEventListener listener : eventListeners) {
-	        	listener.onException(e);
+	        	listener.onError(e);
 	        }
 		}
 	}

@@ -48,7 +48,9 @@ import de.framersoft.maven.destem.restemstats.core.RestemStatsResult;
 import de.framersoft.maven.destem.restemstats.core.RestemVoteValues;
 import de.framersoft.maven.destem.restemstats.core.RestemVoteValuesEventListener;
 import eu.bittrade.libs.steemj.SteemJ;
+import eu.bittrade.libs.steemj.configuration.SteemJConfig;
 import eu.bittrade.libs.steemj.exceptions.SteemCommunicationException;
+import eu.bittrade.libs.steemj.exceptions.SteemInvalidTransactionException;
 import eu.bittrade.libs.steemj.exceptions.SteemResponseException;
 /**
  * the main gui window
@@ -56,6 +58,8 @@ import eu.bittrade.libs.steemj.exceptions.SteemResponseException;
  */
 public class RestemGUI extends JFrame{
 	private static final long serialVersionUID = -7266748948961079730L;
+	
+	private SteemJ steemJInstance = null;
 	
 	private Properties voteValues = new Properties();
 	
@@ -203,7 +207,7 @@ public class RestemGUI extends JFrame{
 				try {
 					reloadVoteValues();
 				} catch (SteemCommunicationException | SteemResponseException e1) {
-					e1.printStackTrace();
+					handleError(e1);
 				}
 			}
 		});
@@ -222,7 +226,7 @@ public class RestemGUI extends JFrame{
 				try {
 					loadRestemStats();
 				} catch (SteemCommunicationException | SteemResponseException | IOException e1) {
-					e1.printStackTrace();
+					handleError(e1);
 				}
 			}
 		});
@@ -375,7 +379,7 @@ public class RestemGUI extends JFrame{
 		
 		if(dateStart == null || dateEnd == null) return;
 		
-		RestemStats stats = new RestemStats(new SteemJ(), dateStart, dateEnd);
+		RestemStats stats = new RestemStats(getSteemJInstance(), dateStart, dateEnd);
 		stats.addListener(new RestemStatsEventListener() {
 			
 			@Override
@@ -399,11 +403,11 @@ public class RestemGUI extends JFrame{
 			}
 			
 			@Override
-			public void onException(Exception e) {
+			public void onError(Throwable e) {
 				progress.setValue(progress.getMaximum());
 				progress.setString("Fehler");
 				setLoading(false);
-				e.printStackTrace();
+				handleError(e);
 			}
 			
 			@Override
@@ -488,7 +492,7 @@ public class RestemGUI extends JFrame{
 	 * reloads the vote values and displays them as finished.
 	 */
 	private void reloadVoteValues() throws SteemCommunicationException, SteemResponseException {
-		RestemVoteValues values = new RestemVoteValues(new SteemJ());
+		RestemVoteValues values = new RestemVoteValues(getSteemJInstance());
 		values.addEventListener(new RestemVoteValuesEventListener() {
 			
 			@Override
@@ -519,19 +523,18 @@ public class RestemGUI extends JFrame{
 				try {
 					saveVoteValues();
 				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+					handleError(e);
 				}
 				
 				setLoading(false);
 			}
 			
 			@Override
-			public void onException(Exception e) {
+			public void onError(Throwable e) {
 				setLoading(false);
 				progress.setString("Fehler");
 				progress.setValue(progress.getMaximum());
-				e.printStackTrace();
+				handleError(e);
 			}
 		});
 		
@@ -575,5 +578,44 @@ public class RestemGUI extends JFrame{
 		cal.setTime(getLastSaturday());
 		cal.add(Calendar.DATE, 6);
 		return cal.getTime();
+	}
+	
+	/**
+	 * @return
+	 * 		the steemj api object
+	 * @throws SteemCommunicationException
+	 * @throws SteemResponseException
+	 */
+	private SteemJ getSteemJInstance() throws SteemCommunicationException, SteemResponseException {
+		if(steemJInstance == null){
+			SteemJConfig config = SteemJConfig.getInstance();
+			config.setResponseTimeout(100000);
+			steemJInstance = new SteemJ();
+		}
+		
+		return steemJInstance;
+	}
+	
+	/**
+	 * basic error handling
+	 * @param e
+	 * 		the error to handle
+	 */
+	private void handleError(Throwable e) {
+		//infinit-loop if not able to connect to any endpoint (e.g. when no internet connection is available...)
+		if(e instanceof StackOverflowError) {
+			JOptionPane.showMessageDialog(null, "Konnte nicht zum API-Endpoint verbinden.", "Fehler", JOptionPane.ERROR_MESSAGE);
+		}
+		else if(e instanceof SteemResponseException){
+			SteemResponseException response = (SteemResponseException) e;
+			JOptionPane.showMessageDialog(null, "Ein Fehler ist aufgetreten, code: " + response.getCode(), "Fehler", JOptionPane.ERROR_MESSAGE);
+		}
+		else if(e instanceof SteemCommunicationException) {
+			SteemCommunicationException e1 = (SteemCommunicationException) e;
+			JOptionPane.showMessageDialog(null, "Kommunikationsfehler: " + e1.getMessage(), "Fehler", JOptionPane.ERROR_MESSAGE);
+		}
+		else {
+			JOptionPane.showMessageDialog(null, e.getMessage(), "Fehler", JOptionPane.ERROR_MESSAGE);
+		}
 	}
 }

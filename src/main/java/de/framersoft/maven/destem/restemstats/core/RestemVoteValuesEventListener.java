@@ -20,11 +20,11 @@ public interface RestemVoteValuesEventListener {
 	public void onStep();
 	
 	/**
-	 * gets calles if an exception occurs
+	 * gets calles if an error occurs
 	 * @param e
-	 * 		the exception
+	 * 		the error
 	 */
-	public void onException(Exception e);
+	public void onError(Throwable e);
 	
 	/**
 	 * gets calles when the thread is finished
